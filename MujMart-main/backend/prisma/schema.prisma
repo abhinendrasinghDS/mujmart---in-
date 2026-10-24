@@ -1,0 +1,152 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("student") // student | admin
+  alias     String   @unique
+  upiId     String?  // For receiving payouts
+  phone     String?  // Contact number
+  address   String?  // Current address (hostel/home)
+  upiQrUrl  String?  // Cloudinary URL of uploaded UPI QR code image
+  repScore  Float    @default(5.0)
+  dealCount Int      @default(0)
+  isBanned  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  listings       Listing[]     @relation("SellerListings")
+  buyerThreads   Thread[]      @relation("BuyerThreads")
+  sellerThreads  Thread[]      @relation("SellerThreads")
+  messages       Message[]
+  buyerTxns      Transaction[] @relation("BuyerTransactions")
+  sellerTxns     Transaction[] @relation("SellerTransactions")
+  disputes       Dispute[]
+  notifications  Notification[]
+  projectRequests ProjectRequest[] @relation("Requester")
+  ownedProjectRequests ProjectRequest[] @relation("Owner")
+}
+
+model Listing {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  price       Float
+  type        String   // sell | resale | rent | free | share
+  category    String
+  condition   String   // New | Good | Fair | Damaged
+  images      String   @default("[]") // JSON array of image URLs
+  attachments String   @default("[]") // JSON array of document URLs
+  deadline    DateTime? // Optional deadline for queries/tasks
+  status      String   @default("active") // active | sold | expired | removed
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  sellerId    String
+  seller      User         @relation("SellerListings", fields: [sellerId], references: [id])
+  threads     Thread[]
+  transactions Transaction[]
+  projectRequests ProjectRequest[]
+}
+
+model Thread {
+  id        String   @id @default(uuid())
+  status    String   @default("open") // open | accepted | closed | rejected
+  createdAt DateTime @default(now())
+
+  listingId String
+  listing   Listing @relation(fields: [listingId], references: [id])
+
+  buyerId   String
+  buyer     User    @relation("BuyerThreads", fields: [buyerId], references: [id])
+
+  sellerId  String
+  seller    User    @relation("SellerThreads", fields: [sellerId], references: [id])
+
+  messages  Message[]
+  disputes  Dispute[]
+}
+
+model Message {
+  id         String   @id @default(uuid())
+  content    String
+  isFiltered Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  threadId   String
+  thread     Thread  @relation(fields: [threadId], references: [id])
+
+  senderId   String
+  sender     User    @relation(fields: [senderId], references: [id])
+}
+
+model Transaction {
+  id             String   @id @default(uuid())
+  amount         Float
+  platformMargin Float    // 5% of amount
+  status              String   @default("pending_payment") // pending_payment | verifying_payment | escrow | ready_for_payout | completed | refunded
+  utrNumber           String?  // Buyer's UPI Transaction ID / UTR
+  paymentScreenshotUrl String? // Cloudinary URL of buyer's payment screenshot
+  createdAt      DateTime @default(now())
+
+  listingId      String
+  listing        Listing @relation(fields: [listingId], references: [id])
+
+  buyerId        String
+  buyer          User    @relation("BuyerTransactions", fields: [buyerId], references: [id])
+
+  sellerId       String
+  seller         User    @relation("SellerTransactions", fields: [sellerId], references: [id])
+}
+
+model Dispute {
+  id        String   @id @default(uuid())
+  reason    String
+  status    String   @default("open") // open | resolved | dismissed
+  createdAt DateTime @default(now())
+
+  threadId  String
+  thread    Thread  @relation(fields: [threadId], references: [id])
+
+  reporterId String
+  reporter   User   @relation(fields: [reporterId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String   // PROJECT_REQUEST | REQUEST_ACCEPTED
+  content   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  relatedId String?  // Optional ID for the listing or request
+}
+
+model ProjectRequest {
+  id          String   @id @default(uuid())
+  status      String   @default("pending") // pending | accepted | rejected
+  createdAt   DateTime @default(now())
+
+  listingId   String
+  listing     Listing  @relation(fields: [listingId], references: [id])
+
+  requesterId String
+  requester   User     @relation("Requester", fields: [requesterId], references: [id])
+
+  ownerId     String
+  owner       User     @relation("Owner", fields: [ownerId], references: [id])
+}
